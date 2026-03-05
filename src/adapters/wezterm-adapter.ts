@@ -73,6 +73,22 @@ export class WezTermAdapter implements TerminalAdapter {
     }
   }
 
+  /**
+   * Build command arguments for the current platform.
+   * On Windows, uses PowerShell. On Unix, uses sh.
+   */
+  private buildCommandArgs(options: SpawnOptions, envArgs: string[]): string[] {
+    if (process.platform === "win32") {
+      // Windows: Use PowerShell
+      // Build the command without environment variables (they'll be set via WezTerm's env)
+      const psCommand = `cd '${options.cwd}'; ${options.command}`;
+      return ["pwsh", "-NoExit", "-Command", psCommand];
+    } else {
+      // Unix: Use sh
+      return ["env", ...envArgs, "sh", "-c", options.command];
+    }
+  }
+
   spawn(options: SpawnOptions): string {
     const weztermBin = this.findWeztermBinary();
     if (!weztermBin) {
@@ -80,40 +96,66 @@ export class WezTermAdapter implements TerminalAdapter {
     }
 
     const panes = this.getPanes();
-    const envArgs = Object.entries(options.env)
-      .filter(([k]) => k.startsWith("PI_"))
-      .map(([k, v]) => `${k}=${v}`);
-
-    let weztermArgs: string[];
     
     // First pane: split to the right with 50% (matches iTerm2/tmux behavior)
     const isFirstPane = panes.length === 1;
 
-    if (isFirstPane) {
-      weztermArgs = [
-        "cli", "split-pane", "--right", "--percent", "50",
-        "--cwd", options.cwd, "--", "env", ...envArgs, "sh", "-c", options.command
-      ];
+    let weztermArgs: string[];
+
+    if (process.platform === "win32") {
+      // Windows: Use PowerShell with double quotes (works when WezTerm wraps in single quotes)
+      const envVars = Object.entries(options.env)
+        .filter(([k]) => k.startsWith("PI_"))
+        .map(([k, v]) => `$env:${k}="${v}"`)
+        .join("; ");
+      
+      const psCommand = `${envVars}; cd "${options.cwd}"; ${options.command}`;
+      // Use 'powershell' (built-in) instead of 'pwsh' (PowerShell Core, may not be installed)
+      const cmdArgs = ["powershell", "-NoExit", "-Command", psCommand];
+
+      if (isFirstPane) {
+        weztermArgs = [
+          "cli", "split-pane", "--right", "--percent", "50",
+          "--cwd", options.cwd, "--", ...cmdArgs
+        ];
+      } else {
+        const currentPaneId = parseInt(process.env.WEZTERM_PANE || "0", 10);
+        const sidebarPanes = panes
+          .filter(p => p.pane_id !== currentPaneId)
+          .sort((a, b) => b.cursor_y - a.cursor_y);
+        const targetPane = sidebarPanes[0];
+
+        weztermArgs = [
+          "cli", "split-pane", "--bottom", "--pane-id", targetPane.pane_id.toString(),
+          "--percent", "50",
+          "--cwd", options.cwd, "--", ...cmdArgs
+        ];
+      }
     } else {
-      // Subsequent teammates stack in the sidebar on the right.
-      // currentPaneId (id 0) is the main pane on the left.
-      // All other panes are in the sidebar.
-      const currentPaneId = parseInt(process.env.WEZTERM_PANE || "0", 10);
-      const sidebarPanes = panes
-        .filter(p => p.pane_id !== currentPaneId)
-        .sort((a, b) => b.cursor_y - a.cursor_y); // Sort by vertical position (bottom-most first)
+      // Unix: Use sh with env command
+      const envArgs = Object.entries(options.env)
+        .filter(([k]) => k.startsWith("PI_"))
+        .map(([k, v]) => `${k}=${v}`);
+      const cmdArgs = ["env", ...envArgs, "sh", "-c", options.command];
 
-      // To add a new pane to the bottom of the sidebar stack:
-      // We always split the BOTTOM-MOST pane (sidebarPanes[0])
-      // and use 50% so the new pane and the previous bottom pane are equal.
-      // This progressively fills the sidebar from top to bottom.
-      const targetPane = sidebarPanes[0];
+      if (isFirstPane) {
+        weztermArgs = [
+          "cli", "split-pane", "--right", "--percent", "50",
+          "--cwd", options.cwd, "--", ...cmdArgs
+        ];
+      } else {
+        const currentPaneId = parseInt(process.env.WEZTERM_PANE || "0", 10);
+        const sidebarPanes = panes
+          .filter(p => p.pane_id !== currentPaneId)
+          .sort((a, b) => b.cursor_y - a.cursor_y);
+        const targetPane = sidebarPanes[0];
 
-      weztermArgs = [
-        "cli", "split-pane", "--bottom", "--pane-id", targetPane.pane_id.toString(),
-        "--percent", "50",
-        "--cwd", options.cwd, "--", "env", ...envArgs, "sh", "-c", options.command
-      ];
+        weztermArgs = [
+          "cli", "split-pane", "--bottom", "--pane-id", targetPane.pane_id.toString(),
+          "--percent", "50",
+          "--cwd", options.cwd, "--", ...cmdArgs
+        ];
+      }
     }
 
     const result = execCommand(weztermBin, weztermArgs);
@@ -181,21 +223,39 @@ export class WezTermAdapter implements TerminalAdapter {
       throw new Error("WezTerm CLI binary not found.");
     }
 
-    const envArgs = Object.entries(options.env)
-      .filter(([k]) => k.startsWith("PI_"))
-      .map(([k, v]) => `${k}=${v}`);
-
     // Format window title as "teamName: agentName" if teamName is provided
     const windowTitle = options.teamName 
       ? `${options.teamName}: ${options.name}`
       : options.name;
 
-    // Spawn a new window
-    const spawnArgs = [
-      "cli", "spawn", "--new-window",
-      "--cwd", options.cwd,
-      "--", "env", ...envArgs, "sh", "-c", options.command
-    ];
+    let spawnArgs: string[];
+
+    if (process.platform === "win32") {
+      // Windows: Use PowerShell with double quotes (works when WezTerm wraps in single quotes)
+      const envVars = Object.entries(options.env)
+        .filter(([k]) => k.startsWith("PI_"))
+        .map(([k, v]) => `$env:${k}="${v}"`)
+        .join("; ");
+      
+      const psCommand = `${envVars}; cd "${options.cwd}"; ${options.command}`;
+      
+      spawnArgs = [
+        "cli", "spawn", "--new-window",
+        "--cwd", options.cwd,
+        "--", "powershell", "-NoExit", "-Command", psCommand
+      ];
+    } else {
+      // Unix: Use env command
+      const envArgs = Object.entries(options.env)
+        .filter(([k]) => k.startsWith("PI_"))
+        .map(([k, v]) => `${k}=${v}`);
+      
+      spawnArgs = [
+        "cli", "spawn", "--new-window",
+        "--cwd", options.cwd,
+        "--", "env", ...envArgs, "sh", "-c", options.command
+      ];
+    }
 
     const result = execCommand(weztermBin, spawnArgs);
     if (result.status !== 0) {

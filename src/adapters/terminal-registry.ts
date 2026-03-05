@@ -10,24 +10,24 @@ import { TmuxAdapter } from "./tmux-adapter";
 import { Iterm2Adapter } from "./iterm2-adapter";
 import { ZellijAdapter } from "./zellij-adapter";
 import { WezTermAdapter } from "./wezterm-adapter";
-import { CmuxAdapter } from "./cmux-adapter";
+import { WindowsAdapter } from "./windows-adapter";
 
 /**
  * Available terminal adapters, ordered by priority
  *
  * Detection order (first match wins):
- * 0. CMUX - if CMUX_SOCKET_PATH is set
  * 1. tmux - if TMUX env is set
  * 2. Zellij - if ZELLIJ env is set and not in tmux
  * 3. iTerm2 - if TERM_PROGRAM=iTerm.app and not in tmux/zellij
  * 4. WezTerm - if WEZTERM_PANE env is set and not in tmux/zellij
+ * 5. Windows - if platform is win32 and not in tmux/zellij/iTerm2/WezTerm
  */
 const adapters: TerminalAdapter[] = [
-  new CmuxAdapter(),
   new TmuxAdapter(),
   new ZellijAdapter(),
   new Iterm2Adapter(),
   new WezTermAdapter(),
+  new WindowsAdapter(),
 ];
 
 /**
@@ -43,21 +43,32 @@ let cachedAdapter: TerminalAdapter | null = null;
  * 2. Zellij - if ZELLIJ env is set and not in tmux
  * 3. iTerm2 - if TERM_PROGRAM=iTerm.app and not in tmux/zellij
  * 4. WezTerm - if WEZTERM_PANE env is set and not in tmux/zellij
+ * 5. Windows - if platform is win32 and not in tmux/zellij/iTerm2/WezTerm
  *
  * @returns The detected terminal adapter, or null if none detected
  */
 export function getTerminalAdapter(): TerminalAdapter | null {
   if (cachedAdapter) {
+    console.log(`[pi-teams debug] Using cached adapter: ${cachedAdapter.name}`);
     return cachedAdapter;
   }
 
+  console.log(`[pi-teams debug] Platform: ${process.platform}`);
+  console.log(`[pi-teams debug] TMUX: ${process.env.TMUX || 'not set'}`);
+  console.log(`[pi-teams debug] ZELLIJ: ${process.env.ZELLIJ || 'not set'}`);
+  console.log(`[pi-teams debug] WEZTERM_PANE: ${process.env.WEZTERM_PANE || 'not set'}`);
+  console.log(`[pi-teams debug] TERM_PROGRAM: ${process.env.TERM_PROGRAM || 'not set'}`);
+
   for (const adapter of adapters) {
+    console.log(`[pi-teams debug] Checking ${adapter.name}...`);
     if (adapter.detect()) {
+      console.log(`[pi-teams debug] Detected: ${adapter.name}`);
       cachedAdapter = adapter;
       return adapter;
     }
   }
 
+  console.log(`[pi-teams debug] No adapter detected!`);
   return null;
 }
 
