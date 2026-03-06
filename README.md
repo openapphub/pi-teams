@@ -1,6 +1,6 @@
 # pi-teams 🚀
 
-**pi-teams** turns your single Pi agent into a coordinated software engineering team. It allows you to spawn multiple "Teammate" agents in separate terminal panes that work autonomously, communicate with each other, and manage a shared task board—all mediated through tmux, Zellij, iTerm2, or WezTerm.
+**pi-teams** turns your single Pi agent into a coordinated software engineering team. It allows you to spawn multiple "Teammate" agents in separate terminal panes that work autonomously, communicate with each other, and manage a shared task board—all mediated through tmux, Zellij, iTerm2, WezTerm, or Windows Terminal.
 
 ### 🖥️ pi-teams in Action
 
@@ -8,7 +8,7 @@
 | :---: | :---: | :---: |
 | <a href="iTerm2.png"><img src="iTerm2.png" width="300" alt="pi-teams in iTerm2"></a> | <a href="tmux.png"><img src="tmux.png" width="300" alt="pi-teams in tmux"></a> | <a href="zellij.png"><img src="zellij.png" width="300" alt="pi-teams in Zellij"></a> |
 
-*Also works with **WezTerm** (cross-platform support)*
+*Also works with **WezTerm** and **Windows Terminal** (cross-platform support)*
 
 ## 🛠 Installation
 
@@ -115,7 +115,7 @@ Teammates in `planning` mode will use `task_submit_plan`. As the lead, review th
 
 ## 🪟 Terminal Requirements
 
-To show multiple agents on one screen, **pi-teams** requires a way to manage terminal panes. It supports **tmux**, **Zellij**, **iTerm2**, and **WezTerm**.
+To show multiple agents on one screen, **pi-teams** requires a way to manage terminal panes. It supports **tmux**, **Zellij**, **iTerm2**, **WezTerm**, and **Windows Terminal**.
 
 ### Option 1: tmux (Recommended)
 
@@ -155,6 +155,38 @@ How to run:
 wezterm  # Start WezTerm
 pi       # Start pi inside WezTerm
 ```
+
+### Option 5: Windows Terminal (Windows)
+
+**Windows Terminal** is the modern, feature-rich terminal emulator for Windows 10/11. It supports both **Panes** and **Separate OS Windows**.
+
+**Requirements:**
+- Windows 10 (version 19041 or later) or Windows 11
+- Windows Terminal installed (available from Microsoft Store or winget)
+- PowerShell 5.1 or later (pwsh.exe)
+
+Install Windows Terminal:
+- **Microsoft Store**: Search for "Windows Terminal" and install
+- **winget**: `winget install Microsoft.WindowsTerminal`
+- **Scoop**: `scoop install windows-terminal`
+
+Install PowerShell Core (optional but recommended):
+- **winget**: `winget install Microsoft.PowerShell`
+- **Scoop**: `scoop install powershell`
+
+How to run:
+```powershell
+# Open Windows Terminal and start pi
+wt
+pi
+```
+
+Or start pi directly from Windows Terminal with new window:
+```powershell
+wt -- pwsh -c "pi"
+```
+
+**Note:** On Windows, pi-teams uses PowerShell for command execution. Make sure `pi` is in your PATH. If you installed pi via npm and Node.js, verify both are accessible from PowerShell.
 
 ## 📜 Credits & Attribution
 

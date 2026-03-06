@@ -1,6 +1,6 @@
 /**
  * Terminal Registry
- * 
+ *
  * Manages terminal adapters and provides automatic selection based on
  * the current environment.
  */
@@ -10,24 +10,24 @@ import { TmuxAdapter } from "./tmux-adapter";
 import { Iterm2Adapter } from "./iterm2-adapter";
 import { ZellijAdapter } from "./zellij-adapter";
 import { WezTermAdapter } from "./wezterm-adapter";
-import { CmuxAdapter } from "./cmux-adapter";
+import { WindowsAdapter } from "./windows-adapter";
 
 /**
  * Available terminal adapters, ordered by priority
  *
  * Detection order (first match wins):
- * 0. CMUX - if CMUX_SOCKET_PATH is set
  * 1. tmux - if TMUX env is set
  * 2. Zellij - if ZELLIJ env is set and not in tmux
  * 3. iTerm2 - if TERM_PROGRAM=iTerm.app and not in tmux/zellij
  * 4. WezTerm - if WEZTERM_PANE env is set and not in tmux/zellij
+ * 5. Windows - if platform is win32 and not in tmux/zellij/iTerm2/WezTerm
  */
 const adapters: TerminalAdapter[] = [
-  new CmuxAdapter(),
   new TmuxAdapter(),
   new ZellijAdapter(),
   new Iterm2Adapter(),
   new WezTermAdapter(),
+  new WindowsAdapter(),
 ];
 
 /**
@@ -43,6 +43,7 @@ let cachedAdapter: TerminalAdapter | null = null;
  * 2. Zellij - if ZELLIJ env is set and not in tmux
  * 3. iTerm2 - if TERM_PROGRAM=iTerm.app and not in tmux/zellij
  * 4. WezTerm - if WEZTERM_PANE env is set and not in tmux/zellij
+ * 5. Windows - if platform is win32 and not in tmux/zellij/iTerm2/WezTerm
  *
  * @returns The detected terminal adapter, or null if none detected
  */
@@ -64,7 +65,7 @@ export function getTerminalAdapter(): TerminalAdapter | null {
 /**
  * Get a specific terminal adapter by name.
  *
- * @param name - The adapter name (e.g., "tmux", "iTerm2", "zellij", "WezTerm")
+ * @param name - The adapter name (e.g., "tmux", "iTerm2", "zellij", "WezTerm", "Windows")
  * @returns The adapter instance, or undefined if not found
  */
 export function getAdapterByName(name: string): TerminalAdapter | undefined {
@@ -73,7 +74,7 @@ export function getAdapterByName(name: string): TerminalAdapter | undefined {
 
 /**
  * Get all available adapters.
- * 
+ *
  * @returns Array of all registered adapters
  */
 export function getAllAdapters(): TerminalAdapter[] {
@@ -96,7 +97,7 @@ export function setAdapter(adapter: TerminalAdapter): void {
 
 /**
  * Check if any terminal adapter is available.
- * 
+ *
  * @returns true if a terminal adapter was detected
  */
 export function hasTerminalAdapter(): boolean {
@@ -105,8 +106,8 @@ export function hasTerminalAdapter(): boolean {
 
 /**
  * Check if the current terminal supports spawning separate OS windows.
- * 
- * @returns true if the detected terminal supports windows (iTerm2, WezTerm)
+ *
+ * @returns true if the detected terminal supports windows (iTerm2, WezTerm, Windows)
  */
 export function supportsWindows(): boolean {
   const adapter = getTerminalAdapter();
@@ -115,7 +116,7 @@ export function supportsWindows(): boolean {
 
 /**
  * Get the name of the currently detected terminal adapter.
- * 
+ *
  * @returns The adapter name, or null if none detected
  */
 export function getTerminalName(): string | null {
