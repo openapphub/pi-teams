@@ -15,19 +15,46 @@ export class TmuxAdapter implements TerminalAdapter {
     return !!process.env.TMUX;
   }
 
+  private getCurrentPaneId(): string | null {
+    const paneId = process.env.TMUX_PANE?.trim();
+    return paneId ? paneId : null;
+  }
+
+  private getWindowIdForPane(paneId: string | null | undefined): string | null {
+    if (!paneId) return null;
+
+    try {
+      const result = execCommand("tmux", ["display-message", "-p", "-t", paneId, "#{window_id}"]);
+      if (result.status !== 0) return null;
+
+      const windowId = result.stdout.trim();
+      return windowId || null;
+    } catch {
+      return null;
+    }
+  }
+
   spawn(options: SpawnOptions): string {
     const envArgs = Object.entries(options.env)
       .filter(([k]) => k.startsWith("PI_"))
       .map(([k, v]) => `${k}=${v}`);
 
+    const originPaneId = this.getCurrentPaneId();
     const tmuxArgs = [
       "split-window",
       "-h", "-dP",
       "-F", "#{pane_id}",
+    ];
+
+    if (originPaneId) {
+      tmuxArgs.push("-t", originPaneId);
+    }
+
+    tmuxArgs.push(
       "-c", options.cwd,
       "env", ...envArgs,
       "sh", "-c", options.command
-    ];
+    );
 
     const result = execCommand("tmux", tmuxArgs);
     
@@ -35,11 +62,20 @@ export class TmuxAdapter implements TerminalAdapter {
       throw new Error(`tmux spawn failed with status ${result.status}: ${result.stderr}`);
     }
 
-    // Apply layout after spawning
-    execCommand("tmux", ["set-window-option", "main-pane-width", "60%"]);
-    execCommand("tmux", ["select-layout", "main-vertical"]);
+    const newPaneId = result.stdout.trim();
+    const layoutTarget = this.getWindowIdForPane(newPaneId) ?? this.getWindowIdForPane(originPaneId);
 
-    return result.stdout.trim();
+    // Apply layout to the exact window that contains the spawned pane so the
+    // split always stays anchored to the originating tmux window.
+    if (layoutTarget) {
+      execCommand("tmux", ["set-window-option", "-t", layoutTarget, "main-pane-width", "60%"]);
+      execCommand("tmux", ["select-layout", "-t", layoutTarget, "main-vertical"]);
+    } else {
+      execCommand("tmux", ["set-window-option", "main-pane-width", "60%"]);
+      execCommand("tmux", ["select-layout", "main-vertical"]);
+    }
+
+    return newPaneId;
   }
 
   kill(paneId: string): void {
@@ -69,7 +105,11 @@ export class TmuxAdapter implements TerminalAdapter {
 
   setTitle(title: string): void {
     try {
-      execCommand("tmux", ["select-pane", "-T", title]);
+      const paneId = this.getCurrentPaneId();
+      const args = paneId
+        ? ["select-pane", "-t", paneId, "-T", title]
+        : ["select-pane", "-T", title];
+      execCommand("tmux", args);
     } catch {
       // Ignore errors
     }
