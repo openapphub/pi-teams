@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.8] - 2025-03-17
+
+### Added
+- **Save Teams as Templates**: Convert runtime teams into reusable predefined team templates (#7)
+  - New `save_team_as_template` tool to save any runtime team as a template
+  - New `list_runtime_teams` tool to see available teams that can be saved
+  - Creates agent definition files (`.md`) with frontmatter for each teammate
+  - Updates `teams.yaml` with the new template entry
+  - Supports both `user` (global) and `project` (local) scope
+  - Enables the workflow: Create → Use → Save → Reuse
+
+### Changed
+- Updated README with comprehensive documentation for the save-to-template workflow
+- Added helper functions to `predefined-teams.ts`: `saveTeamTemplate`, `generateAgentMarkdown`, `generateTeamsYamlWithTemplate`, `listRuntimeTeams`
+
 ## [0.9.7] - 2025-03-17
 
 ### Added

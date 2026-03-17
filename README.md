@@ -46,6 +46,7 @@ pi install npm:pi-teams
 
 ### Advanced Features
 - **Predefined Teams**: Define team templates in `teams.yaml` and spawn entire teams with a single command.
+- **Save Teams as Templates**: Convert any runtime team into a reusable template with a single command.
 - **Isolated OS Windows**: Launch teammates in true separate OS windows instead of panes.
 - **Persistent Window Titles**: Windows are automatically titled `[team-name]: [agent-name]` for easy identification in your window manager.
 - **Plan Approval Mode**: Require teammates to submit their implementation plans for your approval before they touch any code.
@@ -202,6 +203,51 @@ This single command:
 
 **With options:**
 > **You:** "Create a team named 'big-team' from 'full' predefined team using 'gpt-4o' as default model and separate windows."
+
+---
+
+## 💾 Save Teams as Templates
+
+Sometimes you create a team with custom prompts and settings that you'd like to reuse later. Instead of manually creating `teams.yaml` and agent definition files, you can save any runtime team as a template.
+
+### The Workflow
+
+```
+CREATE → USE → SAVE → REUSE
+```
+
+1. **Create** a team with custom teammates and prompts
+2. **Use** the team for your task
+3. **Save** the team as a reusable template
+4. **Reuse** the template later (even on different projects)
+
+### List Runtime Teams
+
+See which teams you have that can be saved:
+
+> **You:** "List all runtime teams."
+
+### Save a Team as a Template
+
+> **You:** "Save team 'my-modularization-team' as template 'code-modularization'"
+
+This creates:
+- Agent definition files in `~/.pi/agent/agents/` for each teammate
+- Updates `~/.pi/teams.yaml` with the new template
+
+### Save to Project-Local Scope
+
+To save a template that's specific to the current project:
+
+> **You:** "Save team 'my-frontend-team' as template 'frontend-sprint' with scope 'project'"
+
+This creates files in `.pi/agents/` and `.pi/teams.yaml` in the current project directory.
+
+### Reuse Your Template
+
+Once saved, use it just like any predefined team:
+
+> **You:** "Create a team named 'auth-refactor' from the 'code-modularization' template in the current directory"
 
 ---
 

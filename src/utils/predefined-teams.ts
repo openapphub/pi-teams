@@ -259,3 +259,251 @@ export function getPredefinedTeam(name: string, projectDir?: string): Predefined
   const teams = getAllPredefinedTeams(projectDir);
   return teams.find(t => t.name === name);
 }
+
+/**
+ * Options for saving a team as a template
+ */
+export interface SaveTeamTemplateOptions {
+  templateName: string;
+  description?: string;
+  scope: "user" | "project";
+  projectDir?: string;
+}
+
+/**
+ * Result of saving a team as a template
+ */
+export interface SaveTeamTemplateResult {
+  templateName: string;
+  agentsDir: string;
+  teamsYamlPath: string;
+  savedAgents: Array<{
+    name: string;
+    path: string;
+    existed: boolean;
+  }>;
+  templateExisted: boolean;
+}
+
+/**
+ * Generate markdown content for an agent definition file
+ */
+export function generateAgentMarkdown(agent: {
+  name: string;
+  description?: string;
+  tools?: string[];
+  model?: string;
+  thinking?: "off" | "minimal" | "low" | "medium" | "high";
+  prompt?: string;
+}): string {
+  const lines: string[] = ["---"];
+  lines.push(`name: ${agent.name}`);
+  if (agent.description) {
+    lines.push(`description: ${agent.description}`);
+  }
+  if (agent.tools && agent.tools.length > 0) {
+    lines.push(`tools: ${agent.tools.join(", ")}`);
+  }
+  if (agent.model) {
+    lines.push(`model: ${agent.model}`);
+  }
+  if (agent.thinking) {
+    lines.push(`thinking: ${agent.thinking}`);
+  }
+  lines.push("---");
+  lines.push("");
+  if (agent.prompt) {
+    lines.push(agent.prompt);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Generate teams.yaml content by adding a new team template
+ */
+export function generateTeamsYamlWithTemplate(
+  existingContent: string,
+  templateName: string,
+  agentNames: string[],
+  description?: string
+): string {
+  // Check if template already exists
+  const lines = existingContent.split("\n");
+  let templateExists = false;
+  let templateStartLine = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === `${templateName}:`) {
+      templateExists = true;
+      templateStartLine = i;
+      break;
+    }
+  }
+
+  if (templateExists) {
+    // Replace existing template - find where it ends
+    let templateEndLine = templateStartLine + 1;
+    while (templateEndLine < lines.length && (lines[templateEndLine].startsWith("  ") || lines[templateEndLine].startsWith("\t"))) {
+      templateEndLine++;
+    }
+    // Remove old template lines
+    lines.splice(templateStartLine, templateEndLine - templateStartLine);
+  }
+
+  // Build new template entry
+  const templateLines: string[] = [];
+  if (description) {
+    templateLines.push(`# ${description}`);
+  }
+  templateLines.push(`${templateName}:`);
+  for (const agentName of agentNames) {
+    templateLines.push(`  - ${agentName}`);
+  }
+  templateLines.push("");
+
+  // Find insertion point (at the end or after existing content)
+  let insertIndex = lines.length;
+  
+  // Remove trailing empty lines to find actual end
+  while (insertIndex > 0 && lines[insertIndex - 1].trim() === "") {
+    insertIndex--;
+  }
+
+  // Insert new template
+  lines.splice(insertIndex, 0, ...templateLines);
+
+  return lines.join("\n");
+}
+
+/**
+ * Save a team configuration as a reusable template.
+ * Creates agent definition files and updates teams.yaml.
+ */
+export function saveTeamTemplate(
+  teamConfig: {
+    name: string;
+    description?: string;
+    members: Array<{
+      name: string;
+      agentType: string;
+      model?: string;
+      thinking?: "off" | "minimal" | "low" | "medium" | "high";
+      prompt?: string;
+    }>;
+    defaultModel?: string;
+  },
+  options: SaveTeamTemplateOptions
+): SaveTeamTemplateResult {
+  // Determine output paths based on scope
+  const baseDir = options.scope === "project"
+    ? path.join(options.projectDir || process.cwd(), ".pi")
+    : path.join(os.homedir(), ".pi", "agent");
+
+  const agentsDir = path.join(baseDir, "agents");
+  const teamsYamlPath = path.join(baseDir, "teams.yaml");
+
+  // Ensure agents directory exists
+  if (!fs.existsSync(agentsDir)) {
+    fs.mkdirSync(agentsDir, { recursive: true });
+  }
+
+  // Filter to only teammates (not the lead)
+  const teammates = teamConfig.members.filter(m => m.agentType === "teammate");
+  const agentNames: string[] = [];
+  const savedAgents: SaveTeamTemplateResult["savedAgents"] = [];
+
+  // Save each teammate as an agent definition
+  for (const member of teammates) {
+    const agentFileName = `${member.name}.md`;
+    const agentPath = path.join(agentsDir, agentFileName);
+    const existed = fs.existsSync(agentPath);
+
+    // Use the model from the member, or fall back to the team's default model
+    const model = member.model || teamConfig.defaultModel;
+
+    const content = generateAgentMarkdown({
+      name: member.name,
+      description: `Agent from team '${teamConfig.name}'`,
+      model,
+      thinking: member.thinking,
+      prompt: member.prompt,
+    });
+
+    fs.writeFileSync(agentPath, content);
+    agentNames.push(member.name);
+    savedAgents.push({ name: member.name, path: agentPath, existed });
+  }
+
+  // Update teams.yaml
+  let teamsContent = "";
+  if (fs.existsSync(teamsYamlPath)) {
+    teamsContent = fs.readFileSync(teamsYamlPath, "utf-8");
+  }
+
+  // Check if template already exists
+  const templateExisted = teamsContent.includes(`${options.templateName}:`);
+
+  // Generate updated teams.yaml content
+  const updatedContent = generateTeamsYamlWithTemplate(
+    teamsContent,
+    options.templateName,
+    agentNames,
+    options.description || teamConfig.description
+  );
+
+  fs.writeFileSync(teamsYamlPath, updatedContent);
+
+  return {
+    templateName: options.templateName,
+    agentsDir,
+    teamsYamlPath,
+    savedAgents,
+    templateExisted,
+  };
+}
+
+/**
+ * List all runtime team configurations from ~/.pi/teams/
+ */
+export function listRuntimeTeams(): Array<{
+  name: string;
+  description?: string;
+  memberCount: number;
+  createdAt?: number;
+}> {
+  const teamsDir = path.join(os.homedir(), ".pi", "teams");
+  
+  if (!fs.existsSync(teamsDir)) {
+    return [];
+  }
+
+  const teams: Array<{
+    name: string;
+    description?: string;
+    memberCount: number;
+    createdAt?: number;
+  }> = [];
+
+  for (const teamDir of fs.readdirSync(teamsDir, { withFileTypes: true })) {
+    if (!teamDir.isDirectory()) continue;
+
+    const configFile = path.join(teamsDir.path || teamsDir.name, teamDir.name, "config.json");
+    const configPath = path.join(os.homedir(), ".pi", "teams", teamDir.name, "config.json");
+    
+    if (fs.existsSync(configPath)) {
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        teams.push({
+          name: config.name || teamDir.name,
+          description: config.description,
+          memberCount: (config.members || []).filter((m: any) => m.agentType === "teammate").length,
+          createdAt: config.createdAt,
+        });
+      } catch {
+        // Skip invalid config files
+      }
+    }
+  }
+
+  return teams;
+}

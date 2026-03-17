@@ -1181,4 +1181,101 @@ export default function (pi: ExtensionAPI) {
       };
     },
   });
+
+  pi.registerTool({
+    name: "save_team_as_template",
+    label: "Save Team as Template",
+    description: "Save a runtime team as a reusable predefined team template. Creates agent definition files and updates teams.yaml. Use this when you've created a team with custom prompts and want to reuse it later.",
+    parameters: Type.Object({
+      team_name: Type.String({ description: "Name of the runtime team to save" }),
+      template_name: Type.String({ description: "Name for the template (e.g., 'modularization', 'frontend-team')" }),
+      description: Type.Optional(Type.String({ description: "Description for the template" })),
+      scope: Type.Optional(StringEnum(["user", "project"], { description: "Where to save: 'user' for global (~/.pi), 'project' for project-local (.pi). Defaults to 'user'." })),
+    }),
+    async execute(toolCallId, params: any, signal, onUpdate, ctx) {
+      const teamName = params.team_name;
+      
+      // Verify the team exists
+      if (!teams.teamExists(teamName)) {
+        throw new Error(`Team "${teamName}" does not exist. Use list_runtime_teams to see available teams.`);
+      }
+
+      // Read the team configuration
+      const config = await teams.readConfig(teamName);
+      
+      // Check that there are teammates to save
+      const teammates = config.members.filter(m => m.agentType === "teammate");
+      if (teammates.length === 0) {
+        throw new Error(`Team "${teamName}" has no teammates to save. Only teams with spawned teammates can be saved as templates.`);
+      }
+
+      // Save the team as a template
+      const result = predefined.saveTeamTemplate(config, {
+        templateName: params.template_name,
+        description: params.description,
+        scope: params.scope || "user",
+        projectDir: ctx.cwd,
+      });
+
+      // Build summary message
+      const agentSummary = result.savedAgents.map(a => 
+        `  - ${a.name}: ${a.existed ? "updated" : "created"} at ${a.path}`
+      ).join("\n");
+      
+      const message = `Team "${teamName}" saved as template "${params.template_name}".
+
+Agents saved:
+${agentSummary}
+
+Template location: ${result.teamsYamlPath}
+
+You can now use this template with:
+  create_predefined_team({ team_name: "new-team", predefined_team: "${params.template_name}", cwd: "..." })`;
+
+      return {
+        content: [{ type: "text", text: message }],
+        details: {
+          teamName,
+          templateName: params.template_name,
+          agentsDir: result.agentsDir,
+          teamsYamlPath: result.teamsYamlPath,
+          savedAgents: result.savedAgents,
+          templateExisted: result.templateExisted,
+        },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "list_runtime_teams",
+    label: "List Runtime Teams",
+    description: "List all runtime team configurations that can be saved as templates. These are active or saved teams from ~/.pi/teams/.",
+    parameters: Type.Object({}),
+    async execute(toolCallId, params: any, signal, onUpdate, ctx) {
+      const runtimeTeams = predefined.listRuntimeTeams();
+      
+      if (runtimeTeams.length === 0) {
+        return {
+          content: [{ type: "text", text: "No runtime teams found. Create a team with team_create first." }],
+          details: { teams: [] },
+        };
+      }
+
+      const result = runtimeTeams.map(team => ({
+        name: team.name,
+        description: team.description,
+        memberCount: team.memberCount,
+        createdAt: team.createdAt ? new Date(team.createdAt).toISOString() : undefined,
+      }));
+
+      const summary = result.map(t => 
+        `- ${t.name}: ${t.memberCount} teammate(s)${t.description ? ` - ${t.description}` : ""}`
+      ).join("\n");
+
+      return {
+        content: [{ type: "text", text: `Runtime teams:\n${summary}` }],
+        details: { teams: result },
+      };
+    },
+  });
 }
