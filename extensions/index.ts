@@ -183,6 +183,85 @@ function registerLeadSession(teamName: string) {
   }));
 }
 
+/**
+ * Check if a process with the given PID is still alive.
+ */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0); // Signal 0 = check if process exists
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clean up a stale team if the lead process is dead.
+ * Kills all teammate panes/windows and removes all state files.
+ * Returns true if cleanup was performed, false otherwise.
+ */
+function cleanupStaleTeam(teamName: string, terminal: any): boolean {
+  const sessionFile = paths.leadSessionPath(teamName);
+  const configFile = paths.configPath(teamName);
+  
+  if (!fs.existsSync(sessionFile) || !fs.existsSync(configFile)) {
+    return false;
+  }
+  
+  try {
+    const session = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
+    
+    // Only cleanup if the lead PID is actually dead
+    if (session.pid && !isPidAlive(session.pid)) {
+      // Read config to get member info for cleanup
+      try {
+        const config = JSON.parse(fs.readFileSync(configFile, "utf-8"));
+        
+        // Kill all teammate panes/windows
+        for (const member of config.members || []) {
+          if (member.name === "team-lead") continue;
+          
+          // Kill via PID file
+          const pidFile = path.join(paths.teamDir(teamName), `${member.name}.pid`);
+          if (fs.existsSync(pidFile)) {
+            try {
+              const pid = fs.readFileSync(pidFile, "utf-8").trim();
+              process.kill(parseInt(pid), "SIGKILL");
+              fs.unlinkSync(pidFile);
+            } catch {}
+          }
+          
+          // Kill via terminal adapter
+          if (terminal) {
+            if (member.windowId) {
+              try { terminal.killWindow(member.windowId); } catch {}
+            }
+            if (member.tmuxPaneId) {
+              try { terminal.kill(member.tmuxPaneId); } catch {}
+            }
+          }
+        }
+      } catch {}
+      
+      // Delete entire team directory
+      const teamDirectory = paths.teamDir(teamName);
+      if (fs.existsSync(teamDirectory)) {
+        fs.rmSync(teamDirectory, { recursive: true });
+      }
+      
+      // Delete tasks directory
+      const tasksDirectory = paths.taskDir(teamName);
+      if (fs.existsSync(tasksDirectory)) {
+        fs.rmSync(tasksDirectory, { recursive: true });
+      }
+      
+      return true;
+    }
+  } catch {}
+  
+  return false;
+}
+
 export default function (pi: ExtensionAPI) {
   const isTeammate = !!process.env.PI_AGENT_NAME;
   const agentName = process.env.PI_AGENT_NAME || "team-lead";
@@ -341,6 +420,12 @@ export default function (pi: ExtensionAPI) {
       separate_windows: Type.Optional(Type.Boolean({ default: false, description: "Open teammates in separate OS windows instead of panes" })),
     }),
     async execute(toolCallId, params: any, signal, onUpdate, ctx) {
+      // Auto-cleanup stale team if the previous lead process is dead
+      // This handles the case where a session was aborted and restarted
+      if (teams.teamExists(params.team_name)) {
+        cleanupStaleTeam(params.team_name, terminal);
+      }
+      
       const config = teams.createTeam(params.team_name, "local-session", "lead-agent", params.description, params.default_model, params.separate_windows);
       // Register this session as the lead so it can receive inbox messages
       registerLeadSession(params.team_name);

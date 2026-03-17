@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.4] - 2026-03-17
+
+### Fixed
+- Auto-cleanup of stale teams when `team_create` is called with an existing team name (#1)
+- Handles the case where a session is aborted and restarted with a different model
+- Old teammate panes/windows are now properly killed before creating a new team
+- Prevents "agents spawned but inactive" issue when switching models mid-session
+
+### Added
+- `isPidAlive()` utility to check if a process is still running
+- `cleanupStaleTeam()` function to clean up dead team state (kills panes, removes files)
+- Automatic detection of stale lead sessions via PID checking
+
 ## [0.9.3] - 2026-03-17
 
 ### Fixed
