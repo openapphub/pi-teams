@@ -107,6 +107,13 @@ Teammates in `planning` mode will use `task_submit_plan`. As the lead, review th
 ### 5. Shut Down Team
 > **You:** "We're done. Shut down the team and close the panes."
 
+**Automatic Cleanup:**
+When you shut down a team, pi-teams automatically cleans up orphaned agent session folders from `~/.pi/agent/teams/` that are older than 1 hour. This prevents accumulation of stale session data over time.
+
+**Manual Cleanup:**
+If you need to clean up agent sessions without shutting down a team, or want to use a different age threshold:
+> **You:** "Clean up agent session folders older than 24 hours."
+
 ---
 
 ## 🏗️ Predefined Teams

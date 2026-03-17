@@ -12,6 +12,7 @@ import { Iterm2Adapter } from "../src/adapters/iterm2-adapter";
 import * as predefined from "../src/utils/predefined-teams";
 import * as path from "node:path";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import { spawnSync } from "node:child_process";
 
 // Cache for available models
@@ -261,6 +262,45 @@ function cleanupStaleTeam(teamName: string, terminal: any): boolean {
   } catch {}
   
   return false;
+}
+
+/**
+ * Clean up orphaned agent session folders from ~/.pi/agent/teams/
+ * These are created by the pi core system when agents are spawned.
+ * We remove folders that are older than 24 hours to avoid deleting active sessions.
+ * Returns the number of folders cleaned up.
+ */
+function cleanupAgentSessionFolders(maxAgeMs: number = 24 * 60 * 60 * 1000): number {
+  const agentTeamsDir = path.join(os.homedir(), ".pi", "agent", "teams");
+  if (!fs.existsSync(agentTeamsDir)) return 0;
+
+  let cleaned = 0;
+  const now = Date.now();
+
+  for (const dir of fs.readdirSync(agentTeamsDir)) {
+    const sessionDir = path.join(agentTeamsDir, dir);
+    const configFile = path.join(sessionDir, "config.json");
+
+    try {
+      // Check if this is a directory with a config.json
+      if (!fs.statSync(sessionDir).isDirectory()) continue;
+      if (!fs.existsSync(configFile)) continue;
+
+      // Read the config to check the creation time
+      const config = JSON.parse(fs.readFileSync(configFile, "utf-8"));
+      const createdAt = config.createdAt ? new Date(config.createdAt).getTime() : 0;
+
+      // If the folder is older than maxAgeMs, delete it
+      if (createdAt > 0 && (now - createdAt) > maxAgeMs) {
+        fs.rmSync(sessionDir, { recursive: true });
+        cleaned++;
+      }
+    } catch {
+      // Ignore errors for individual folders
+    }
+  }
+
+  return cleaned;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -794,10 +834,41 @@ export default function (pi: ExtensionAPI) {
         const tasksDir = paths.taskDir(teamName);
         if (fs.existsSync(tasksDir)) fs.rmSync(tasksDir, { recursive: true });
         if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
-        return { content: [{ type: "text", text: `Team ${teamName} shut down.` }], details: {} };
+
+        // Clean up orphaned agent session folders (older than 1 hour)
+        const cleanedSessions = cleanupAgentSessionFolders(60 * 60 * 1000);
+
+        return {
+          content: [{
+            type: "text",
+            text: `Team ${teamName} shut down.${cleanedSessions > 0 ? ` Cleaned up ${cleanedSessions} orphaned agent session folder(s).` : ""}`
+          }],
+          details: { cleanedSessions }
+        };
       } catch (e) {
         throw new Error(`Failed to shutdown team: ${e}`);
       }
+    },
+  });
+
+  pi.registerTool({
+    name: "cleanup_agent_sessions",
+    label: "Cleanup Agent Sessions",
+    description: "Clean up orphaned agent session folders from ~/.pi/agent/teams/ that are older than a specified age.",
+    parameters: Type.Object({
+      max_age_hours: Type.Optional(Type.Number()),
+    }),
+    async execute(toolCallId, params: any, signal, onUpdate, ctx) {
+      const maxAgeHours = params.max_age_hours ?? 24;
+      const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
+      const cleaned = cleanupAgentSessionFolders(maxAgeMs);
+      return {
+        content: [{
+          type: "text",
+          text: `Cleaned up ${cleaned} orphaned agent session folder(s) older than ${maxAgeHours} hour(s).`
+        }],
+        details: { cleaned, maxAgeHours }
+      };
     },
   });
 

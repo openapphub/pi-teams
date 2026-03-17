@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.7] - 2025-03-17
+
+### Added
+- **Automatic cleanup of orphaned agent session folders** (#cleanup)
+  - New `cleanupAgentSessionFolders()` utility function to remove stale `~/.pi/agent/teams/` entries
+  - `team_shutdown` now automatically cleans up agent sessions older than 1 hour
+  - New `cleanup_agent_sessions` tool for manual cleanup with configurable max age
+  - Prevents accumulation of orphaned agent session folders (186+ folders were found in some environments)
+
+### Changed
+- `team_shutdown` now reports the number of cleaned agent session folders in its output
+
 ## [0.9.6] - 2025-03-17
 
 ### Added
