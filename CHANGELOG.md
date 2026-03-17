@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-03-17
+
+### Fixed
+- Tmux teammate spawning now correctly targets the originating pane/window
+- Prevents teammates from appearing in wrong tmux window when client context changes
+- Layout commands (`set-window-option`, `select-layout`) now target the correct window
+- `setTitle()` now explicitly targets the current pane
+
+### Added
+- `anchorPaneId` option to `SpawnOptions` for explicit pane targeting
+- Tests for `TmuxAdapter` with pane targeting scenarios
+
 ## [0.9.0] - 2026-03-17
 
 ### Added
