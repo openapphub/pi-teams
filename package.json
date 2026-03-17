@@ -20,8 +20,7 @@
     "agent-orchestration",
     "coding-assistant",
     "terminal",
-    "tmux",
-    "zellij"
+    "tmux"
   ],
   "scripts": {
     "test": "vitest run"
