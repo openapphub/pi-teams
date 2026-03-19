@@ -15,6 +15,29 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import { spawnSync } from "node:child_process";
 
+/**
+ * Build the command used to relaunch pi for teammate processes.
+ *
+ * In Bun-compiled pi binaries, process.argv[1] points at a virtual $bunfs path
+ * like /$bunfs/root/pi, which is not a real file and breaks when prefixed with
+ * `node`. process.execPath points at the actual executable in both compiled and
+ * regular environments, so prefer that when available.
+ */
+function getPiLaunchCommand(): string {
+  // If we have an execPath, use it directly (works for both compiled binaries and node scripts)
+  if (process.execPath) {
+    return JSON.stringify(process.execPath);
+  }
+
+  // Fallback: try argv[1] with node prefix for regular node environments
+  if (process.argv[1]) {
+    return `node ${JSON.stringify(process.argv[1])}`;
+  }
+
+  // Last resort: just use "pi" and hope it's on PATH
+  return "pi";
+}
+
 // Cache for available models
 let availableModelsCache: Array<{ provider: string; model: string }> | null = null;
 let modelsCacheTime = 0;
@@ -553,7 +576,7 @@ export default function (pi: ExtensionAPI) {
       await teams.addMember(safeTeamName, member);
       await messaging.sendPlainMessage(safeTeamName, "team-lead", safeName, params.prompt, "Initial prompt");
 
-      const piBinary = process.argv[1] ? `node ${process.argv[1]}` : "pi";
+      const piBinary = getPiLaunchCommand();
       let piCmd = piBinary;
 
       if (chosenModel) {
@@ -638,7 +661,7 @@ export default function (pi: ExtensionAPI) {
 
       const teamConfig = await teams.readConfig(safeTeamName);
       const cwd = params.cwd || process.cwd();
-      const piBinary = process.argv[1] ? `node ${process.argv[1]}` : "pi";
+      const piBinary = getPiLaunchCommand();
       let piCmd = piBinary;
       if (teamConfig.defaultModel) {
         // Use the combined --model provider/model format
@@ -1105,7 +1128,7 @@ export default function (pi: ExtensionAPI) {
           await teams.addMember(safeTeamName, member);
           await messaging.sendPlainMessage(safeTeamName, "team-lead", safeName, agentDef.prompt, "Initial prompt from predefined team");
 
-          const piBinary = process.argv[1] ? `node ${process.argv[1]}` : "pi";
+          const piBinary = getPiLaunchCommand();
           let piCmd = piBinary;
 
           if (chosenModel) {

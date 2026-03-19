@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.9] - 2025-03-19
+
+### Fixed
+- **Bun-compiled binary support**: Fixed spawning teammates when pi is compiled as a Bun binary (#10)
+  - Added `getPiLaunchCommand()` helper to detect and handle Bun-compiled binaries
+  - Bun binaries have `process.argv[1]` pointing to virtual `/$bunfs/root/pi` path
+  - Now uses `process.execPath` which works for both compiled binaries and regular Node environments
+  - Fixes "node /$bunfs/root/pi" error when spawning teammates in compiled mode
+
 ## [0.9.8] - 2025-03-17
 
 ### Added
